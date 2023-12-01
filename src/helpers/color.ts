@@ -202,6 +202,44 @@ function normalizeAlphaComponent(component: AlphaComponent): AlphaComponent {
 				Math.round(component * 10000) / 10000) as AlphaComponent;
 }
 
+function convertOklchToRgb(L, C, H) {
+    // Convert from OKLCH to OKLAB
+    const a = C * Math.cos(H * Math.PI / 180);
+    const b = C * Math.sin(H * Math.PI / 180);
+
+    // Convert from OKLAB to linear sRGB
+    const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+    const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+    const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+
+    const l = Math.pow(l_, 3);
+    const m = Math.pow(m_, 3);
+    const s = Math.pow(s_, 3);
+
+    const lr = +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+    const lg = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+    const lb = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+
+    // Apply gamma correction to get sRGB values
+    const gammaCorrect = (c) => {
+        if (c <= 0.0031308) {
+            return 12.92 * c;
+        } else {
+            return 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+        }
+    };
+
+    const r = gammaCorrect(lr);
+    const g = gammaCorrect(lg);
+    const b = gammaCorrect(lb);
+
+    return [
+        Math.round(Math.max(0, Math.min(1, r)) * 255),
+        Math.round(Math.max(0, Math.min(1, g)) * 255),
+        Math.round(Math.max(0, Math.min(1, b)) * 255)
+    ];
+}
+
 /**
  * @example
  * #fb0
@@ -237,6 +275,15 @@ const rgbRe = /^rgb\(\s*(-?\d{1,10})\s*,\s*(-?\d{1,10})\s*,\s*(-?\d{1,10})\s*\)$
  * rgba(255,234,245,0.1)
  */
 const rgbaRe = /^rgba\(\s*(-?\d{1,10})\s*,\s*(-?\d{1,10})\s*,\s*(-?\d{1,10})\s*,\s*(-?[\d]{0,10}(?:\.\d+)?)\s*\)$/;
+
+/**
+ * @example
+ * oklch(0.748 0.26 342.55)
+ * @example
+ * oklch(0.13138 0.0392 275.75)
+ */
+const oklchRe = /^oklch\(\s*(-?\d{1,5})\s*,\s*(-?\d{1,5})\s*,\s*(-?\d{1,5})\s*\)$/;
+
 
 function colorStringToRgba(colorString: string): Rgba {
 	colorString = colorString.toLowerCase();
@@ -281,6 +328,25 @@ function colorStringToRgba(colorString: string): Rgba {
 			];
 		}
 	}
+
+	{
+    		const matches = oklchRe.exec(colorString);
+		if (matches) {
+			const rgb = convertOklchToRgb(
+			    parseFloat(matches[1]),
+			    parseFloat(matches[2]),
+			    parseFloat(matches[3])
+			);
+		
+			return [
+			    normalizeRgbComponent<RedComponent>(rgb[0]),
+			    normalizeRgbComponent<GreenComponent>(rgb[1]),
+			    normalizeRgbComponent<BlueComponent>(rgb[2]),
+			    1 as AlphaComponent,
+			];
+		}
+	}
+		
 
 	throw new Error(`Cannot parse color: ${colorString}`);
 }
